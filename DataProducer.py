@@ -4,7 +4,10 @@ import json,time,datetime
 
 # The excel data is read from the following link
 # Note: Reading the .xlsx file requires openpyxl library
-df = pd.read_excel("https://archive.ics.uci.edu/ml/machine-learning-databases/00352/Online%20Retail.xlsx")
+#df = pd.read_excel("https://archive.ics.uci.edu/ml/machine-learning-databases/00352/Online%20Retail.xlsx")
+df = pd.read_excel("D:/Users/MASTO-2975DAS/Documents/upGrad/BigData/BD C7 - Retail Data Analysis/Online Retail.xlsx")
+
+#df['InvoiceNo']=df['InvoiceNo'].astype('int32')
 
 # The following line is for creating a new column called 'type'
 # The type column is for differenciating whether the data is of type item oreder or item return
@@ -38,19 +41,20 @@ item_df = df[['invoice_no','SKU','title','unit_price','quantity']]
 data_l = df[['invoice_no','country','timestamp','type']].drop_duplicates().to_dict('records')
 
 # A connection is establisted with the Kafka server and the topic
-producer = KafkaProducer(bootstrap_servers='192.168.0.226:9092')
-topic='test'
+producer = KafkaProducer(bootstrap_servers='44.200.201.2:9092')
+topic='real-time-project'
 
 
 # preTimestamp = datetime.datetime.timestamp(invoiceDate_df.iloc[0,1])
 for x in data_l:
+    x['timestamp'] = str(datetime.datetime.now())
     x['items']=item_df.loc[item_df['invoice_no']==x['invoice_no']].drop(['invoice_no'],axis=1).to_dict('records')
 #     currentTimestamp = datetime.datetime.timestamp(
 #         invoiceDate_df.loc[invoiceDate_df['invoice_no']==x['invoice_no']].iloc[0,1]
 #     )
 #     time.sleep(int(currentTimestamp-preTimestamp))
 #     preTimestamp = currentTimestamp
-    time.sleep(1)
-    ack = producer.send(topic,json.dumps(x).encode('utf-8'))
+    time.sleep(5)
+    ack = producer.send(topic,key=b'Data',value=bytes(json.dumps(x).encode('utf-8')))
     meta = ack.get()
-    print("Topic:{} Time:{}".format(meta.topic,currentTimestamp))
+    print("Topic:{}".format(meta.topic))

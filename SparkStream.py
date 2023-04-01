@@ -73,6 +73,14 @@ timeKPI = commonDf\
     (sumUDF('total_cost')/(sumUDF('is_return')+sumUDF('is_order'))).alias('average_transaction_size')\
 )
 
+timeCountryKPI = commonDf\
+.withWatermark('timestamp',"1 minutes")\
+.groupBy('country',window('timestamp','1 minutes'))\
+.agg(sumUDF('is_order').alias('OPM'),\
+    sumUDF('total_cost').alias('total_volume_sales'),\
+    (sumUDF('is_return')/(sumUDF('is_return')+sumUDF('is_order'))).alias('rate_of_return'),\
+    (sumUDF('total_cost')/(sumUDF('is_return')+sumUDF('is_order'))).alias('average_transaction_size')\
+)
 
 
 summerisedInputQuery = summerisedInput\
@@ -86,10 +94,17 @@ summerisedInputQuery = summerisedInput\
 timeKPIQuery = timeKPI\
 .writeStream\
 .format('json')\
-.option('checkpointLocation','/user/root/checkpoint/kpi')\
 .option('path','/user/root/time_kpi/time_kpi_v1')\
+.trigger(processingTime='10 minutes')\
+.start()
+
+timeCountryKPIQuery = timeCountryKPI\
+.writeStream\
+.format('json')\
+.option('path','/user/root/country_kpi/country_kpi_v1')\
 .trigger(processingTime='10 minutes')\
 .start()
 
 summerisedInputQuery.awaitTermination()
 timeKPIQuery.awaitTermination()
+timeCountryKPIQuery.awaitTermination()

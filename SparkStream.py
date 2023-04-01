@@ -28,7 +28,7 @@ schema = StructType([
 
 inputDf=spark.readStream\
 .format("kafka")\
-.option("kafka.bootstrap.servers","ec2-18-206-39-141.compute-1.amazonaws.com:9092")\
+.option("kafka.bootstrap.servers","172.31.29.89:9092")\
 .option("subscribe","real-time-project")\
 .option('startingOffset','earliest')\
 .load()
@@ -60,27 +60,28 @@ commonDf = inputDf\
 summerisedInput = commonDf\
 .drop('items','type')
 
-# OPM = sum(is_order)
-# total_volume_sales = sum(total_cost)
-# rate_of_return = sum(is_return)/(sum(is_order)+sum(is_return))
-# average_transaction_size = total_volume_sales/(sum(is_order)+sum(is_return))
+commonDf = commonDf\
+.withWatermark('timestamp',"1 minutes")
+
+# # OPM = sum(is_order)
+# # total_volume_sales = sum(total_cost)
+# # rate_of_return = sum(is_return)/(sum(is_order)+sum(is_return))
+# # average_transaction_size = total_volume_sales/(sum(is_order)+sum(is_return))
 timeKPI = commonDf\
-.withWatermark('timestamp',"1 minutes")\
 .groupBy(window('timestamp','1 minutes'))\
 .agg(sumUDF('is_order').alias('OPM'),\
     sumUDF('total_cost').alias('total_volume_sales'),\
     (sumUDF('is_return')/(sumUDF('is_return')+sumUDF('is_order'))).alias('rate_of_return'),\
     (sumUDF('total_cost')/(sumUDF('is_return')+sumUDF('is_order'))).alias('average_transaction_size')\
-)
+)#.sort('window')
 
 timeCountryKPI = commonDf\
-.withWatermark('timestamp',"1 minutes")\
-.groupBy('country',window('timestamp','1 minutes'))\
+.groupBy(window('timestamp','1 minutes'),'country')\
 .agg(sumUDF('is_order').alias('OPM'),\
     sumUDF('total_cost').alias('total_volume_sales'),\
     (sumUDF('is_return')/(sumUDF('is_return')+sumUDF('is_order'))).alias('rate_of_return'),\
     (sumUDF('total_cost')/(sumUDF('is_return')+sumUDF('is_order'))).alias('average_transaction_size')\
-)
+)#.sort('window')
 
 
 summerisedInputQuery = summerisedInput\
@@ -95,6 +96,7 @@ timeKPIQuery = timeKPI\
 .writeStream\
 .format('json')\
 .option('path','/user/root/time_kpi/time_kpi_v1')\
+.option('checkpointLocation','/user/root/time_kpi/')\
 .trigger(processingTime='10 minutes')\
 .start()
 
@@ -102,6 +104,7 @@ timeCountryKPIQuery = timeCountryKPI\
 .writeStream\
 .format('json')\
 .option('path','/user/root/country_kpi/country_kpi_v1')\
+.option('checkpointLocation','/user/root/country_kpi/')\
 .trigger(processingTime='10 minutes')\
 .start()
 

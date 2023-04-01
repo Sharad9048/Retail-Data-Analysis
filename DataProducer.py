@@ -1,11 +1,11 @@
 import pandas as pd
 from kafka import KafkaProducer
-import json,time,datetime
+import json,time,datetime,random
 
 # The excel data is read from the following link
 # Note: Reading the .xlsx file requires openpyxl library
-#df = pd.read_excel("https://archive.ics.uci.edu/ml/machine-learning-databases/00352/Online%20Retail.xlsx")
-df = pd.read_excel("D:/Users/MASTO-2975DAS/Documents/upGrad/BigData/BD C7 - Retail Data Analysis/Online Retail.xlsx")
+df = pd.read_excel("https://archive.ics.uci.edu/ml/machine-learning-databases/00352/Online%20Retail.xlsx")
+# df = pd.read_excel("D:/Users/MASTO-2975DAS/Documents/upGrad/BigData/BD C7 - Retail Data Analysis/Online Retail.xlsx")
 
 #df['InvoiceNo']=df['InvoiceNo'].astype('int32')
 
@@ -29,7 +29,7 @@ df.rename(columns={
 }, inplace=True)
 
 # The data is sorted in ascending order of InvoiceDate column so that the data is sent in a sequence
-df.sort_values(by=['InvoiceDate'],ascending=True,inplace=True)
+# df.sort_values(by=['InvoiceDate'],ascending=True,inplace=True)
 
 # New dataframe is create which will help in determining the delays between each sending data
 invoiceDate_df = df[['invoice_no','InvoiceDate']].drop_duplicates()
@@ -39,9 +39,9 @@ item_df = df[['invoice_no','SKU','title','unit_price','quantity']]
 
 # A list of dictionary is created form invoice datarframe
 data_l = df[['invoice_no','country','timestamp','type']].drop_duplicates().to_dict('records')
-
+random.shuffle(data_l)
 # A connection is establisted with the Kafka server and the topic
-producer = KafkaProducer(bootstrap_servers='44.200.201.2:9092')
+producer = KafkaProducer(bootstrap_servers='localhost:9092')
 topic='real-time-project'
 
 

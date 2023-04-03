@@ -1,7 +1,7 @@
 import threading,os,time
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType,StructField,StringType,IntegerType,FloatType,ArrayType,LongType,ByteType
-from pyspark.sql.functions import col,udf,from_json,to_timestamp,window
+from pyspark.sql.types import StructType,StructField,StringType,IntegerType,FloatType,ArrayType,LongType,ByteType,TimestampType
+from pyspark.sql.functions import col,udf,from_json,window
 from pyspark.streaming.context import StreamingContext
 # """
 #  I have imported the sum function as sumUDF, 
@@ -13,11 +13,17 @@ from pyspark.sql.functions import sum as sumUDF
 # This function is for stopping the query gracefully when 'stop' file is found
 # """
 def stopQueryProcess(query:StreamingContext,stopFile):
-    print("Run command 'touch stop' to stop the spark streaming")
     while(1):
         if os.path.exists(stopFile):
-            print("Stoping command recieved")
-            query.stop(stopGraceFully=True)
+            print("Stoping command recieved to stop {}".format(query.name))
+            while query.isActive:
+                if not query.status['isTriggerActive']:
+                    print("Trigger is in Inactive stopping query {}".format(query.name))
+                    query.stop()
+                    break
+                else:
+                    print("Trigger is active for {}".format(query.name))
+                    time.sleep(0.5)
             break
         time.sleep(1)
 
@@ -25,6 +31,8 @@ def stopQueryProcess(query:StreamingContext,stopFile):
 # This function is for starting a thread to stop the query.
 # """
 def stopQuery(query:StreamingContext):
+    print("-----------------------------------------------------------------------------------------")
+    print("Run command 'touch stop' to stop the spark streaming {}".format(query.name))
     stopFile = 'stop'
     stopProcess = threading.Thread(target=stopQueryProcess,args=(query,stopFile,),daemon=True)
     stopProcess.setDaemon(True)
@@ -70,7 +78,7 @@ spark=SparkSession.builder\
 schema = StructType([
     StructField('invoice_no',LongType(),False),
     StructField('country',StringType(),False),
-    StructField('timestamp',StringType(),False),
+    StructField('timestamp',TimestampType(),False),
     StructField('type',StringType(),False),
     StructField(
         'items',ArrayType(
@@ -133,7 +141,6 @@ isReturn = udf(
 #   'total_items' is created by using UDF 'totalItems' on 'items.quantity'.
 #   'is_order' is created by using UDF 'isOrder' on 'type'
 #   'is_return' is created by using UDF 'isReturn' on 'type'
-# - The timestamp string is converted to timestamp datatype using 'to_timestamp' function
 # """
 commonDf = inputDf\
 .select(from_json(col("value").cast("string"),schema).alias('data'))\
@@ -141,8 +148,7 @@ commonDf = inputDf\
 .withColumn('total_cost',totalCost(col('items.quantity'),col('items.unit_price')))\
 .withColumn('total_items',totalItems(col('items.quantity')))\
 .withColumn('is_order',isOrder(col('type')))\
-.withColumn('is_return',isReturn(col('type')))\
-.withColumn('timestamp',to_timestamp(col("timestamp")))
+.withColumn('is_return',isReturn(col('type')))
 
 # """
 # - 'summerisedInput' dataframe is given a copy of 'commonDf' dataframe dropping two columns 'items' and 'type'
@@ -226,8 +232,8 @@ timeCountryKPIQuery = timeCountryKPI\
 
 # The qureies will stop when 'stop' file is found
 stopQuery(summerisedInputQuery)
-stopQuery(timeKPI)
-stopQuery(timeCountryKPI)
+stopQuery(timeKPIQuery)
+stopQuery(timeCountryKPIQuery)
 
 # The queries are set to continue transformation until the process is terminated
 summerisedInputQuery.awaitTermination()

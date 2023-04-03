@@ -13,19 +13,21 @@ from pyspark.sql.functions import sum as sumUDF
 # This function is for stopping the query gracefully when 'stop' file is found
 # """
 def stopQueryProcess(query:StreamingContext,stopFile):
-  print("Run command 'touch stop' to stop the spark streaming")
-  while(1):
-    if os.path.exists(stopFile):
-      print("Stoping command recieved")
-      query.stop(stopGraceFully=True)
-    time.sleep(1)
+    print("Run command 'touch stop' to stop the spark streaming")
+    while(1):
+        if os.path.exists(stopFile):
+            print("Stoping command recieved")
+            query.stop(stopGraceFully=True)
+            break
+        time.sleep(1)
 
 # """
 # This function is for starting a thread to stop the query.
 # """
 def stopQuery(query:StreamingContext):
     stopFile = 'stop'
-    stopProcess = threading.Thread(stopQueryProcess,args=(query,stopFile))
+    stopProcess = threading.Thread(target=stopQueryProcess,args=(query,stopFile,),daemon=True)
+    stopProcess.setDaemon(True)
     stopProcess.start()
 
 
@@ -89,10 +91,10 @@ schema = StructType([
 # - In the bootstrap server option the private IP address and port is passed.
 # - In the subcribe option the topic name 'real-time-project' is passed.
 # - In the starting offset opthin I want the earlist to the latest data within processing time interval. 
-# """
+# """18.211.252.152:9092
 inputDf=spark.readStream\
 .format("kafka")\
-.option("kafka.bootstrap.servers","18.211.252.152:9092")\
+.option("kafka.bootstrap.servers","192.168.0.226:9092")\
 .option("subscribe","real-time-project")\
 .option('startingOffset','earliest')\
 .load()

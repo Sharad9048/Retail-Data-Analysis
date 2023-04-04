@@ -48,6 +48,45 @@ spark=SparkSession.builder\
 .appName('SparkStream')\
 .getOrCreate()
 
+# """
+# - The code will read data from the kafka topic 'real-time-project, 
+#   perform transformation and store in inputDF dataframe
+# - The format is for declaring that the code will read from a kafka server.
+# - In the bootstrap server option the private IP address and port is passed.
+# - In the subcribe option the topic name 'real-time-project' is passed.
+# - In the starting offset opthin I want the earlist to the latest data within processing time interval. 
+# """18.211.252.152:9092
+inputDf=spark.readStream\
+.format("kafka")\
+.option("kafka.bootstrap.servers","18.211.252.152:9092")\
+.option("subscribe","real-time-project")\
+.option('startingOffset','earliest')\
+.load()
+
+# This UDF will be used for creating total_cost column
+@udf(returnType=FloatType())    # Declaring UDF with return type as FloatType
+def totalCost(arr1,arr2):       # Defining function accepting two arrays
+    result = 0                  # It will the summation of the products 
+    for x,y in zip(arr1,arr2):  # Creating loop where x will have elements of arr1 and y will have elements of arr2
+        result+=x*y             # The x and y are multiplied, added with the result and stored in the result
+    return result               # The value in result is returned
+
+# This UDF will be used for creating total_items column
+@udf(returnType=IntegerType())  # Declaring UDF with return type as IntegerType
+def totalItems(arr1):           # Defining function accepting array
+    return sum(arr1)            # The sum of the elements in the array is returned
+
+# This UDF will be used for creating new column is_order
+isOrder = udf(
+    lambda x:1 if x=='ORDER' else 0,    # It will check if the input="ORDER" then return 1 else 0 
+    ByteType()                          # Declaring return type to be ByteType
+)
+
+# This UDF will be used for creating new column is_retur
+isReturn = udf(
+    lambda x:1 if x=='RETURN' else 0,   # It will check if the input="RETURN" then return 1 else 0
+    ByteType()                          # Declaring return type to be ByteType
+)
 
 # """
 # {
@@ -87,50 +126,11 @@ schema = StructType([
                 StructField('title',StringType(),False),
                 StructField('unit_price',FloatType(),False),
                 StructField('quantity',IntegerType(),False),
-            ])
+            ]),
+            False
         )
     )
 ])
-
-# """
-# - The code will read data from the kafka topic 'real-time-project, 
-#   perform transformation and store in inputDF dataframe
-# - The format is for declaring that the code will read from a kafka server.
-# - In the bootstrap server option the private IP address and port is passed.
-# - In the subcribe option the topic name 'real-time-project' is passed.
-# - In the starting offset opthin I want the earlist to the latest data within processing time interval. 
-# """18.211.252.152:9092
-inputDf=spark.readStream\
-.format("kafka")\
-.option("kafka.bootstrap.servers","192.168.0.226:9092")\
-.option("subscribe","real-time-project")\
-.option('startingOffset','earliest')\
-.load()
-
-# This UDF will be used for creating total_cost column
-@udf(returnType=FloatType())    # Declaring UDF with return type as FloatType
-def totalCost(arr1,arr2):       # Defining function accepting two arrays
-    result = 0                  # It will the summation of the products 
-    for x,y in zip(arr1,arr2):  # Creating loop where x will have elements of arr1 and y will have elements of arr2
-        result+=x*y             # The x and y are multiplied, added with the result and stored in the result
-    return result               # The value in result is returned
-
-# This UDF will be used for creating total_items column
-@udf(returnType=IntegerType())  # Declaring UDF with return type as IntegerType
-def totalItems(arr1):           # Defining function accepting array
-    return sum(arr1)            # The sum of the elements in the array is returned
-
-# This UDF will be used for creating new column is_order
-isOrder = udf(
-    lambda x:1 if x=='ORDER' else 0,    # It will check if the input="ORDER" then return 1 else 0 
-    ByteType()                          # Declaring return type to be ByteType
-)
-
-# This UDF will be used for creating new column is_retur
-isReturn = udf(
-    lambda x:1 if x=='RETURN' else 0,   # It will check if the input="RETURN" then return 1 else 0
-    ByteType()                          # Declaring return type to be ByteType
-)
 
 # """
 # The inputDf is transformend and stored in commomDf dataframe
@@ -159,7 +159,7 @@ summerisedInput = commonDf\
 # """
 # - Watermark is added to 'commonDf' to perform aggrigations
 # """
-commonDf = commonDf\
+commonWatermarkedDf = commonDf\
 .withWatermark('timestamp',"1 minutes")
 
 # """
@@ -167,12 +167,12 @@ commonDf = commonDf\
 # - Groupby transformation against window of 'timestamp' of 1 minute is added
 # - Aggrigation is add creating columns 'OPM', 'total_volume_sales', 'rate_of_return', 'average_transaction_size'.
 # """
-timeKPI = commonDf\
+timeKPI = commonWatermarkedDf\
 .groupBy(window('timestamp','1 minutes'))\
 .agg(sumUDF('is_order').alias('OPM'),\
-    sumUDF('total_cost').alias('total_volume_sales'),\
-    (sumUDF('is_return')/(sumUDF('is_return')+sumUDF('is_order'))).alias('rate_of_return'),\
-    (sumUDF('total_cost')/(sumUDF('is_return')+sumUDF('is_order'))).alias('average_transaction_size')\
+    sumUDF('total_cost').alias('total_sale_volume'),\
+    (sumUDF('total_cost')/(sumUDF('is_return')+sumUDF('is_order'))).alias('average_transaction_size'),\
+    (sumUDF('is_return')/(sumUDF('is_return')+sumUDF('is_order'))).alias('rate_of_return')\
 )
 
 # """
@@ -180,12 +180,11 @@ timeKPI = commonDf\
 # - Groupby transformation against window of 'timestamp' of 1 minute and country is added
 # - Aggrigation is add creating columns 'OPM', 'total_volume_sales', 'rate_of_return', 'average_transaction_size'.
 # """
-timeCountryKPI = commonDf\
+timeCountryKPI = commonWatermarkedDf\
 .groupBy(window('timestamp','1 minutes'),'country')\
 .agg(sumUDF('is_order').alias('OPM'),\
-    sumUDF('total_cost').alias('total_volume_sales'),\
+    sumUDF('total_cost').alias('total_sale_volume'),\
     (sumUDF('is_return')/(sumUDF('is_return')+sumUDF('is_order'))).alias('rate_of_return'),\
-    (sumUDF('total_cost')/(sumUDF('is_return')+sumUDF('is_order'))).alias('average_transaction_size')\
 )
 
 # """

@@ -65,11 +65,11 @@ inputDf=spark.readStream\
 
 # This UDF will be used for creating total_cost column
 @udf(returnType=FloatType())    # Declaring UDF with return type as FloatType
-def totalCost(arr1,arr2):       # Defining function accepting two arrays
+def totalCost(arr1,arr2,invoice_type):       # Defining function accepting two arrays
     result = 0                  # It will the summation of the products 
     for x,y in zip(arr1,arr2):  # Creating loop where x will have elements of arr1 and y will have elements of arr2
         result+=x*y             # The x and y are multiplied, added with the result and stored in the result
-    return result               # The value in result is returned
+    return result if invoice_type=="ORDER" else -result             # The value in result is returned
 
 # This UDF will be used for creating total_items column
 @udf(returnType=IntegerType())  # Declaring UDF with return type as IntegerType
@@ -145,7 +145,7 @@ schema = StructType([
 commonDf = inputDf\
 .select(from_json(col("value").cast("string"),schema).alias('data'))\
 .select('data.*')\
-.withColumn('total_cost',totalCost(col('items.quantity'),col('items.unit_price')))\
+.withColumn('total_cost',totalCost(col('items.quantity'),col('items.unit_price'),col('type')))\
 .withColumn('total_items',totalItems(col('items.quantity')))\
 .withColumn('is_order',isOrder(col('type')))\
 .withColumn('is_return',isReturn(col('type')))

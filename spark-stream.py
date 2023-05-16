@@ -60,7 +60,6 @@ inputDf=spark.readStream\
 .format("kafka")\
 .option("kafka.bootstrap.servers","18.211.252.152:9092")\
 .option("subscribe","real-time-project")\
-.option('startingOffset','earliest')\
 .load()
 
 # This UDF will be used for creating total_cost column
